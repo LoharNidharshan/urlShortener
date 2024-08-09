@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  url-shortener
+
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  UrlShortenerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.shortenUrl
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+            Resource: !GetAtt UrlShortenerTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlShortenerTable
+      Events:
+        ShortenUrl:
+          Type: Api
+          Properties:
+            Path: /shorten
+            Method: post
+
+  UrlRetrieverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.retrieveUrl
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !GetAtt UrlShortenerTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlShortenerTable
+      Events:
+        RetrieveUrl:
+          Type: Api
+          Properties:
+            Path: /{shortId}
+            Method: get
+
+  UrlShortenerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UrlShortener
+      AttributeDefinitions:
+        - AttributeName: shortId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: shortId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+Outputs:
+  ShortenUrlApi:
+    Description: "API Gateway endpoint URL for Shorten Url function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/shorten"
+  RetrieveUrlApi:
+    Description: "API Gateway endpoint URL for Retrieve Url function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/{shortId}"
