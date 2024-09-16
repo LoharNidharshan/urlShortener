@@ -1,127 +1,233 @@
-# url-shortener
+# URL Shortener Service
+## Overview
+This project is a serverless URL shortener service, built using AWS SAM (Serverless Application Model). The service allows users to create shortened URLs and retrieve the original URLs based on the shortened IDs. The application is powered by AWS Lambda, API Gateway, and DynamoDB.
 
-This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
+## The service consists of two main functions:
 
-- hello-world - Code for the application's Lambda function.
-- events - Invocation events that you can use to invoke the function.
-- hello-world/tests - Unit tests for the application code. 
-- template.yaml - A template that defines the application's AWS resources.
+Shorten URL: Generates a shortened URL and stores it in a DynamoDB table.
+Retrieve URL: Retrieves the original URL based on the short ID and redirects the user.
+## Features
+### Create Shortened URLs: 
+Users can send a POST request with a long URL, and the service returns a shortened URL.
+### Retrieve Original URLs: 
+When the shortened URL is accessed, the service retrieves the original long URL from DynamoDB and redirects the user.
+### Serverless Architecture: 
+Built with AWS Lambda and API Gateway for scalable, event-driven architecture.
+### Data Persistence: 
+Uses DynamoDB to store the mapping between the shortened IDs and the original URLs.
+### Efficient: 
+DynamoDB is used in PAY_PER_REQUEST mode for cost efficiency based on the application's usage.
+## Architecture
+### API Gateway: 
+Handles the HTTP requests for shortening and retrieving URLs.
+### Lambda Functions:
+### UrlShortenerFunction: 
+Shortens the provided URL and stores the mapping in DynamoDB.
+### UrlRetrieverFunction: 
+Retrieves the long URL based on the short ID and redirects the user.
+### DynamoDB: 
+Stores the mapping between shortId and longUrl.
+### SAM Template: 
+Defines the resources and infrastructure needed for the URL shortener, including Lambda functions, API Gateway routes, and DynamoDB.
+## SAM Template Details
+The SAM template (template.yaml) defines the following resources:
 
-The application uses several AWS resources, including Lambda functions and an API Gateway API. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
+## UrlShortenerFunction:
 
-If you prefer to use an integrated development environment (IDE) to build and test your application, you can use the AWS Toolkit.  
-The AWS Toolkit is an open source plug-in for popular IDEs that uses the SAM CLI to build and deploy serverless applications on AWS. The AWS Toolkit also adds a simplified step-through debugging experience for Lambda function code. See the following links to get started.
+A Lambda function that handles URL shortening.
+Stores the shortened URL and its mapping in DynamoDB.
+Exposed via an API Gateway POST request to /shorten.
 
-* [CLion](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [GoLand](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [IntelliJ](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [WebStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [Rider](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PhpStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PyCharm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [RubyMine](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [DataGrip](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [VS Code](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/welcome.html)
-* [Visual Studio](https://docs.aws.amazon.com/toolkit-for-visual-studio/latest/user-guide/welcome.html)
+## UrlRetrieverFunction:
 
-## Deploy the sample application
+A Lambda function that retrieves the original long URL based on a short ID.
+Redirects the user to the original URL.
+Exposed via an API Gateway GET request to /{shortId}.
 
-The Serverless Application Model Command Line Interface (SAM CLI) is an extension of the AWS CLI that adds functionality for building and testing Lambda applications. It uses Docker to run your functions in an Amazon Linux environment that matches Lambda. It can also emulate your application's build environment and API.
+## UrlShortenerTable (DynamoDB Table):
 
-To use the SAM CLI, you need the following tools.
+Stores the mapping between the short ID (shortId) and the original URL (longUrl).
+The table uses the shortId as the primary key.
 
-* SAM CLI - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* Node.js - [Install Node.js 20](https://nodejs.org/en/), including the NPM package management tool.
-* Docker - [Install Docker community edition](https://hub.docker.com/search/?type=edition&offering=community)
+## SAM Template
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  url-shortener
 
-To build and deploy your application for the first time, run the following in your shell:
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  UrlShortenerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.shortenUrl
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+            Resource: !GetAtt UrlShortenerTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlShortenerTable
+      Events:
+        ShortenUrl:
+          Type: Api
+          Properties:
+            Path: /shorten
+            Method: post
+
+  UrlRetrieverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.retrieveUrl
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !GetAtt UrlShortenerTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlShortenerTable
+      Events:
+        RetrieveUrl:
+          Type: Api
+          Properties:
+            Path: /{shortId}
+            Method: get
+
+  UrlShortenerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UrlShortener
+      AttributeDefinitions:
+        - AttributeName: shortId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: shortId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+Outputs:
+  ShortenUrlApi:
+    Description: "API Gateway endpoint URL for Shorten Url function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/shorten"
+  RetrieveUrlApi:
+    Description: "API Gateway endpoint URL for Retrieve Url function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/{shortId}"
+```
+## Lambda Function Code
+### Shorten URL (shortenUrl)
+This function generates a shortened URL by creating a random shortId and storing it in DynamoDB along with the original long URL.
+
+```javascript
+const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
+
+const dynamoDb = new AWS.DynamoDB.DocumentClient();
+const tableName = process.env.TABLE_NAME;
+
+exports.shortenUrl = async (event) => {
+  const body = JSON.parse(event.body);
+  const longUrl = body.url;
+  const shortId = uuidv4().slice(0, 6);
+
+  const params = {
+    TableName: tableName,
+    Item: {
+      shortId: shortId,
+      longUrl: longUrl,
+    },
+  };
+
+  await dynamoDb.put(params).promise();
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ shortUrl: `https://${event.headers.Host}/${shortId}` }),
+  };
+};
+```
+## Retrieve URL (retrieveUrl)
+This function retrieves the original URL from DynamoDB using the provided shortId and redirects the user.
+
+```javascript
+const AWS = require('aws-sdk');
+
+const dynamoDb = new AWS.DynamoDB.DocumentClient();
+const tableName = process.env.TABLE_NAME;
+
+exports.retrieveUrl = async (event) => {
+  const shortId = event.pathParameters.shortId;
+
+  const params = {
+    TableName: tableName,
+    Key: {
+      shortId: shortId,
+    },
+  };
+
+  const result = await dynamoDb.get(params).promise();
+
+  if (!result.Item) {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ message: 'URL not found' }),
+    };
+  }
+
+  return {
+    statusCode: 301,
+    headers: {
+      Location: result.Item.longUrl,
+    },
+  };
+};
+```
+## API Endpoints
+POST /shorten: Shortens a provided URL and returns a shortened URL.
+
+## Example Request Body:
+```json
+{
+  "url": "https://www.example.com"
+}
+```
+## Example Response:
+```json
+{
+  "shortUrl": "https://your-api-url/abcdef"
+}
+```
+GET /{shortId}: Redirects to the original long URL based on the short ID.
+
+## Example Response: 
+A 301 redirect to the original URL.
+## Setup & Deployment
+### Prerequisites
+AWS Account: You need an AWS account with sufficient privileges to create Lambda functions, API Gateway, and DynamoDB tables.
+Node.js: Ensure Node.js is installed for local development.
+AWS SAM CLI: Install the AWS SAM CLI to build and deploy the application.
+## Steps to Deploy
+### Build the application:
 
 ```bash
 sam build
+```
+### Deploy the application:
+
+```bash
 sam deploy --guided
 ```
+Follow the prompts to specify parameters like stack name, region, etc.
 
-The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
-
-* **Stack Name**: The name of the stack to deploy to CloudFormation. This should be unique to your account and region, and a good starting point would be something matching your project name.
-* **AWS Region**: The AWS region you want to deploy your app to.
-* **Confirm changes before deploy**: If set to yes, any change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes.
-* **Allow SAM CLI IAM role creation**: Many AWS SAM templates, including this example, create AWS IAM roles required for the AWS Lambda function(s) included to access AWS services. By default, these are scoped down to minimum required permissions. To deploy an AWS CloudFormation stack which creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, to deploy this example you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
-* **Save arguments to samconfig.toml**: If set to yes, your choices will be saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
-
-You can find your API Gateway Endpoint URL in the output values displayed after deployment.
-
-## Use the SAM CLI to build and test locally
-
-Build your application with the `sam build` command.
-
-```bash
-url-shortener$ sam build
-```
-
-The SAM CLI installs dependencies defined in `hello-world/package.json`, creates a deployment package, and saves it in the `.aws-sam/build` folder.
-
-Test a single function by invoking it directly with a test event. An event is a JSON document that represents the input that the function receives from the event source. Test events are included in the `events` folder in this project.
-
-Run functions locally and invoke them with the `sam local invoke` command.
-
-```bash
-url-shortener$ sam local invoke HelloWorldFunction --event events/event.json
-```
-
-The SAM CLI can also emulate your application's API. Use the `sam local start-api` to run the API locally on port 3000.
-
-```bash
-url-shortener$ sam local start-api
-url-shortener$ curl http://localhost:3000/
-```
-
-The SAM CLI reads the application template to determine the API's routes and the functions that they invoke. The `Events` property on each function's definition includes the route and method for each path.
-
-```yaml
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-```
-
-## Add a resource to your application
-The application template uses AWS Serverless Application Model (AWS SAM) to define application resources. AWS SAM is an extension of AWS CloudFormation with a simpler syntax for configuring common serverless application resources such as functions, triggers, and APIs. For resources not included in [the SAM specification](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md), you can use standard [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html) resource types.
-
-## Fetch, tail, and filter Lambda function logs
-
-To simplify troubleshooting, SAM CLI has a command called `sam logs`. `sam logs` lets you fetch logs generated by your deployed Lambda function from the command line. In addition to printing the logs on the terminal, this command has several nifty features to help you quickly find the bug.
-
-`NOTE`: This command works for all AWS Lambda functions; not just the ones you deploy using SAM.
-
-```bash
-url-shortener$ sam logs -n HelloWorldFunction --stack-name url-shortener --tail
-```
-
-You can find more information and examples about filtering Lambda function logs in the [SAM CLI Documentation](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-logging.html).
-
-## Unit tests
-
-Tests are defined in the `hello-world/tests` folder in this project. Use NPM to install the [Mocha test framework](https://mochajs.org/) and run unit tests.
-
-```bash
-url-shortener$ cd hello-world
-hello-world$ npm install
-hello-world$ npm run test
-```
-
-## Cleanup
-
-To delete the sample application that you created, use the AWS CLI. Assuming you used your project name for the stack name, you can run the following:
-
-```bash
-sam delete --stack-name url-shortener
-```
-
-## Resources
-
-See the [AWS SAM developer guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html) for an introduction to SAM specification, the SAM CLI, and serverless application concepts.
-
-Next, you can use AWS Serverless Application Repository to deploy ready to use Apps that go beyond hello world samples and learn how authors developed their applications: [AWS Serverless Application Repository main page](https://aws.amazon.com/serverless/serverlessrepo/)
+Access the endpoints: After the deployment is complete, the API Gateway endpoint URLs for shortening and retrieving URLs will be outputted.
